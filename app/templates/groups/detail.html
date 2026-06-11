@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} — BillSplit{% endblock %}
+{% block content %}
+<div class="px-4 pt-6 pb-4">
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-5">
+    <a href="/groups" class="p-2 -ml-2 text-gray-400">
+      <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+      </svg>
+    </a>
+    <div class="flex-1">
+      <h1 class="text-xl font-bold text-gray-900">{{ group.name }}</h1>
+    </div>
+    <!-- Invite link copy -->
+    <button x-data x-on:click="
+        navigator.clipboard.writeText('{{ request.base_url }}groups/join/{{ group.invite_token }}');
+        $el.textContent = 'Copied!';
+        setTimeout(() => $el.textContent = 'Invite', 2000)
+      "
+      class="text-sm font-medium text-indigo-600 px-3 py-1.5 border border-indigo-200 rounded-xl">
+      Invite
+    </button>
+  </div>
+
+  <!-- Members -->
+  <div class="flex gap-2 mb-5 flex-wrap">
+    {% for member in members %}
+    <div class="flex items-center gap-1.5 bg-white rounded-full px-3 py-1.5 shadow-sm text-sm">
+      <div class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+        {{ member.display_name[0].upper() }}
+      </div>
+      <span class="text-gray-700">{{ member.display_name }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Balances -->
+  {% set has_balances = balances|length > 0 %}
+  {% if has_balances %}
+  <h2 class="font-semibold text-gray-900 mb-2">Balances</h2>
+  <div class="space-y-2 mb-5">
+    {% for (debtor_id, creditor_id), amount in balances.items() %}
+    {% set debtor = user_map.get(debtor_id) %}
+    {% set creditor = user_map.get(creditor_id) %}
+    {% if debtor and creditor %}
+    <div class="bg-white rounded-2xl shadow-sm p-4" x-data="{ settling: false }">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          {% if debtor_id == current_user.id %}
+          <p class="font-medium text-gray-900">You owe <span class="text-gray-700">{{ creditor.display_name }}</span></p>
+          {% elif creditor_id == current_user.id %}
+          <p class="font-medium text-gray-900"><span class="text-gray-700">{{ debtor.display_name }}</span> owes you</p>
+          {% else %}
+          <p class="font-medium text-gray-900">{{ debtor.display_name }} owes {{ creditor.display_name }}</p>
+          {% endif %}
+          <p class="text-xl font-bold {% if debtor_id == current_user.id %}text-red-500{% elif creditor_id == current_user.id %}text-emerald-500{% else %}text-gray-700{% endif %}">${{ "%.2f"|format(amount) }}</p>
+        </div>
+        {% if debtor_id == current_user.id %}
+        <button @click="settling = !settling" class="text-sm font-medium text-indigo-600 px-3 py-1.5 border border-indigo-200 rounded-xl">
+          Settle up
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Pay links -->
+      {% if debtor_id == current_user.id %}
+      <div class="flex gap-2 flex-wrap mt-2">
+        {% if creditor.venmo_handle %}
+        <a href="https://venmo.com/{{ creditor.venmo_handle }}?txn=pay&amount={{ '%.2f'|format(amount) }}&note=BillSplit"
+           target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#3d95ce] text-white rounded-lg text-xs font-medium">
+          Pay via Venmo
+        </a>
+        {% endif %}
+        {% if creditor.paypal_me %}
+        <a href="https://paypal.me/{{ creditor.paypal_me }}/{{ '%.2f'|format(amount) }}"
+           target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#003087] text-white rounded-lg text-xs font-medium">
+          Pay via PayPal
+        </a>
+        {% endif %}
+        {% if creditor.cashapp_handle %}
+        <a href="https://cash.app/${{ creditor.cashapp_handle }}/{{ '%.2f'|format(amount) }}"
+           target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#00d632] text-black rounded-lg text-xs font-medium">
+          Pay via Cash App
+        </a>
+        {% endif %}
+        {% if creditor.zelle_contact %}
+        <span class="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+          Zelle: {{ creditor.zelle_contact }}
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Settle up form -->
+      {% if debtor_id == current_user.id %}
+      <div x-show="settling" x-cloak class="mt-3 pt-3 border-t border-gray-100">
+        <form method="post" action="/groups/{{ group.id }}/settle" class="flex gap-2">
+          <input type="hidden" name="to_user_id" value="{{ creditor_id }}">
+          <input type="number" name="amount" step="0.01" min="0.01" value="{{ '%.2f'|format(amount) }}" required
+                 class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <input type="text" name="note" placeholder="Note (optional)"
+                 class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium">Mark paid</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Bills -->
+  <div class="flex justify-between items-center mb-2">
+    <h2 class="font-semibold text-gray-900">Bills</h2>
+    <a href="/groups/{{ group.id }}/bills/new" class="text-sm font-medium text-indigo-600">+ Add Bill</a>
+  </div>
+
+  {% if bills %}
+  <div class="space-y-2">
+    {% for bill in bills %}
+    <a href="/bills/{{ bill.id }}" class="flex items-center justify-between bg-white rounded-2xl shadow-sm p-4 active:bg-gray-50">
+      <div>
+        <p class="font-medium text-gray-900">{{ bill.title }}</p>
+        <p class="text-xs text-gray-400">Paid by {{ bill.payer.display_name }} · {{ bill.created_at.strftime('%b %d') }}</p>
+      </div>
+      <svg class="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+      </svg>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="bg-white rounded-2xl shadow-sm p-8 text-center">
+    <p class="text-gray-400 mb-4">No bills yet</p>
+    <a href="/groups/{{ group.id }}/bills/new" class="inline-block px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Add First Bill</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

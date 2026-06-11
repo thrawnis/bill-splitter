@@ -1,0 +1,124 @@
+{% set assigned_map = {} %}
+{% for item in bill.items %}
+  {% set _ = assigned_map.update({item.id: item.assignments|map(attribute='user_id')|list}) %}
+{% endfor %}
+
+<!-- Items list -->
+<div class="bg-white rounded-2xl shadow-sm overflow-hidden mb-3">
+  <div class="px-4 pt-4 pb-2 flex justify-between items-center">
+    <h2 class="font-semibold text-gray-900">Items</h2>
+    <span class="text-xs text-gray-400">Tap names to assign</span>
+  </div>
+
+  {% if bill.items %}
+  <div class="divide-y divide-gray-50">
+    {% for item in bill.items %}
+    <div class="px-4 py-3">
+      <div class="flex justify-between items-start mb-2">
+        <div class="flex-1 min-w-0 mr-3">
+          <p class="font-medium text-gray-900 truncate">{{ item.name }}</p>
+          <p class="text-sm text-gray-400">
+            {% if item.quantity > 1 %}{{ item.quantity }} × {% endif %}${{ "%.2f"|format(item.price) }}
+            {% if item.quantity > 1 %} = ${{ "%.2f"|format(item.price * item.quantity) }}{% endif %}
+          </p>
+        </div>
+        <button
+          hx-delete="/bills/{{ bill.id }}/items/{{ item.id }}"
+          hx-target="#bill-main-content"
+          hx-swap="innerHTML"
+          hx-confirm="Remove {{ item.name }}?"
+          class="text-gray-300 hover:text-red-400 p-1 flex-shrink-0">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Member assignment chips -->
+      <div class="flex gap-1.5 flex-wrap">
+        {% for member in members %}
+        {% set is_assigned = member.id in assigned_map.get(item.id, []) %}
+        <button
+          hx-post="/bills/{{ bill.id }}/items/{{ item.id }}/toggle/{{ member.id }}"
+          hx-target="#bill-main-content"
+          hx-swap="innerHTML"
+          class="px-2.5 py-1 rounded-full text-xs font-medium transition-colors {% if is_assigned %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-500{% endif %}">
+          {{ member.display_name.split()[0] }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="px-4 pb-4 text-sm text-gray-400">No items yet. Add one below or scan a receipt.</p>
+  {% endif %}
+
+  <!-- Add item form -->
+  <div class="px-4 pb-4 pt-2 border-t border-gray-50">
+    <form
+      hx-post="/bills/{{ bill.id }}/items"
+      hx-target="#bill-main-content"
+      hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.reset()"
+      class="flex gap-2">
+      <input type="text" name="name" placeholder="Item name" required
+             class="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <input type="number" name="price" placeholder="0.00" step="0.01" min="0.01" required
+             class="w-24 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <button type="submit"
+              class="px-3 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold flex-shrink-0">+</button>
+    </form>
+  </div>
+</div>
+
+<!-- Tax & Tip -->
+<div class="bg-white rounded-2xl shadow-sm p-4 mb-3">
+  <h2 class="font-semibold text-gray-900 mb-3">Tax &amp; Tip</h2>
+  <form
+    hx-post="/bills/{{ bill.id }}/tax-tip"
+    hx-target="#bill-main-content"
+    hx-swap="innerHTML"
+    hx-trigger="change">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Tax ($)</label>
+        <input type="number" name="tax" value="{{ '%.2f'|format(bill.tax) }}" step="0.01" min="0"
+               class="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Tip ($)</label>
+        <input type="number" name="tip" value="{{ '%.2f'|format(bill.tip) }}" step="0.01" min="0"
+               class="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Per-person summary -->
+{% set grand_total = bill.items|map(attribute='price')|map('float')|sum %}
+{% if bill.items %}
+<div class="bg-white rounded-2xl shadow-sm p-4 mb-3">
+  <h2 class="font-semibold text-gray-900 mb-3">Summary</h2>
+  <div class="space-y-2">
+    {% for member in members %}
+    {% set total = person_totals.get(member.id, 0) %}
+    {% if total > 0 %}
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+          {{ member.display_name[0].upper() }}
+        </div>
+        <span class="text-sm text-gray-700">{{ member.display_name }}</span>
+        {% if member.id == bill.paid_by %}<span class="text-xs text-gray-400">(paid)</span>{% endif %}
+      </div>
+      <span class="font-semibold {% if member.id == current_user.id and member.id != bill.paid_by %}text-red-500{% elif member.id == current_user.id %}text-gray-900{% else %}text-gray-700{% endif %}">${{ "%.2f"|format(total) }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between">
+    <span class="text-sm font-medium text-gray-600">Total</span>
+    <span class="font-bold text-gray-900">${{ "%.2f"|format(person_totals.values()|sum) }}</span>
+  </div>
+</div>
+{% endif %}
