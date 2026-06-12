@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from ..auth import require_user
 from ..config import settings
 from ..database import get_db
-from ..models import Bill, BillItem, Group, ItemAssignment, Settlement, User
-from ..services.balance import bill_person_totals
+from ..models import Bill, BillGuest, BillItem, Group, ItemAssignment, Settlement, User
+from ..services.balance import bill_participant_totals
+from ..services.email import EmailError, send_payment_request
 from ..services.ollama import parse_receipt
 from .common import get_group_member_users, is_group_member, parse_money, templates
 
@@ -40,9 +41,10 @@ def _bill_context(bill: Bill, current_user: User, db: Session, **extra) -> dict:
     return {
         "bill": bill,
         "members": members,
-        "person_totals": bill_person_totals(bill, members),
+        "person_totals": bill_participant_totals(bill),
         "payer": db.query(User).filter(User.id == bill.paid_by).first(),
         "current_user": current_user,
+        "email_enabled": settings.email_enabled,
         **extra,
     }
 
@@ -51,6 +53,18 @@ def _bill_partial(request: Request, bill: Bill, current_user: User, db: Session,
     return templates.TemplateResponse(
         request, "partials/bill_content.html", _bill_context(bill, current_user, db, **extra)
     )
+
+
+def _rebalance_item(item_id: uuid.UUID, db: Session) -> None:
+    assignments = db.query(ItemAssignment).filter(ItemAssignment.item_id == item_id).all()
+    if assignments:
+        equal_share = Decimal("1") / len(assignments)
+        for a in assignments:
+            a.share = equal_share
+
+
+def _base_url(request: Request) -> str:
+    return (settings.app_base_url or str(request.base_url)).rstrip("/")
 
 
 @router.get("/groups/{group_id}/bills/new")
@@ -168,22 +182,133 @@ def toggle_item_user(
     if not item or not is_group_member(db, bill.group_id, user_id):
         return _bill_partial(request, bill, current_user, db)
 
-    existing = db.query(ItemAssignment).filter(ItemAssignment.item_id == item_id, ItemAssignment.user_id == user_id).first()
+    existing = db.query(ItemAssignment).filter(
+        ItemAssignment.item_id == item_id, ItemAssignment.user_id == user_id
+    ).first()
     if existing:
         db.delete(existing)
     else:
         db.add(ItemAssignment(item_id=item_id, user_id=user_id, share=Decimal("1")))
     db.flush()
-
-    assignments = db.query(ItemAssignment).filter(ItemAssignment.item_id == item_id).all()
-    if assignments:
-        equal_share = Decimal("1") / len(assignments)
-        for a in assignments:
-            a.share = equal_share
-
+    _rebalance_item(item_id, db)
     db.commit()
     db.refresh(bill)
     return _bill_partial(request, bill, current_user, db)
+
+
+@router.post("/bills/{bill_id}/items/{item_id}/toggle-guest/{guest_id}")
+def toggle_item_guest(
+    bill_id: uuid.UUID,
+    item_id: uuid.UUID,
+    guest_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    bill = _get_bill_for_member(bill_id, current_user.id, db)
+    if not bill:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    item = db.query(BillItem).filter(BillItem.id == item_id, BillItem.bill_id == bill_id).first()
+    guest = db.query(BillGuest).filter(BillGuest.id == guest_id, BillGuest.bill_id == bill_id).first()
+    if not item or not guest:
+        return _bill_partial(request, bill, current_user, db)
+
+    existing = db.query(ItemAssignment).filter(
+        ItemAssignment.item_id == item_id, ItemAssignment.guest_id == guest_id
+    ).first()
+    if existing:
+        db.delete(existing)
+    else:
+        db.add(ItemAssignment(item_id=item_id, guest_id=guest_id, share=Decimal("1")))
+    db.flush()
+    _rebalance_item(item_id, db)
+    db.commit()
+    db.refresh(bill)
+    return _bill_partial(request, bill, current_user, db)
+
+
+@router.post("/bills/{bill_id}/guests")
+def add_guest(
+    bill_id: uuid.UUID,
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(default=""),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    bill = _get_bill_for_member(bill_id, current_user.id, db)
+    if not bill:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    if not name.strip():
+        return _bill_partial(request, bill, current_user, db, guest_error="Enter a name for the guest.")
+
+    db.add(BillGuest(
+        bill_id=bill_id,
+        name=name.strip()[:100],
+        email=email.strip()[:255] or None,
+        request_token=secrets.token_urlsafe(32),
+    ))
+    db.commit()
+    db.refresh(bill)
+    return _bill_partial(request, bill, current_user, db)
+
+
+@router.delete("/bills/{bill_id}/guests/{guest_id}")
+def delete_guest(
+    bill_id: uuid.UUID,
+    guest_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    bill = _get_bill_for_member(bill_id, current_user.id, db)
+    if not bill:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    guest = db.query(BillGuest).filter(BillGuest.id == guest_id, BillGuest.bill_id == bill_id).first()
+    if guest:
+        db.delete(guest)
+        db.commit()
+        db.refresh(bill)
+    return _bill_partial(request, bill, current_user, db)
+
+
+@router.post("/bills/{bill_id}/guests/{guest_id}/email")
+def email_guest_request(
+    bill_id: uuid.UUID,
+    guest_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    bill = _get_bill_for_member(bill_id, current_user.id, db)
+    if not bill:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    guest = db.query(BillGuest).filter(BillGuest.id == guest_id, BillGuest.bill_id == bill_id).first()
+    if not guest:
+        return _bill_partial(request, bill, current_user, db)
+    if not guest.email:
+        return _bill_partial(request, bill, current_user, db, flash_error=f"{guest.name} has no email address.")
+
+    amount = bill_participant_totals(bill).get(("g", guest.id), Decimal("0"))
+    payer = db.query(User).filter(User.id == bill.paid_by).first()
+    link = f"{_base_url(request)}/request/{guest.request_token}"
+    body = (
+        f"Hi {guest.name},\n\n"
+        f"{payer.display_name} is requesting ${amount:.2f} for \"{bill.title}\".\n\n"
+        f"View the details and pay here:\n{link}\n\n"
+        f"Sent via BillSplit."
+    )
+
+    try:
+        send_payment_request(guest.email, f"You owe {payer.display_name} ${amount:.2f}", body)
+    except EmailError as e:
+        return _bill_partial(request, bill, current_user, db, flash_error=str(e))
+
+    return _bill_partial(request, bill, current_user, db, flash=f"Request emailed to {guest.name}.")
 
 
 @router.post("/bills/{bill_id}/tax-tip")
@@ -274,9 +399,24 @@ def bill_share(share_token: str, request: Request, db: Session = Depends(get_db)
             "current_user": None,
             "bill": bill,
             "members": members,
-            "person_totals": bill_person_totals(bill, members),
+            "person_totals": bill_participant_totals(bill),
             "payer": db.query(User).filter(User.id == bill.paid_by).first(),
         },
+    )
+
+
+@router.get("/request/{request_token}")
+def guest_request(request_token: str, request: Request, db: Session = Depends(get_db)):
+    guest = db.query(BillGuest).filter(BillGuest.request_token == request_token).first()
+    if not guest:
+        return templates.TemplateResponse(request, "error.html", {"current_user": None, "message": "Request not found."})
+
+    bill = guest.bill
+    amount = bill_participant_totals(bill).get(("g", guest.id), Decimal("0"))
+    payer = db.query(User).filter(User.id == bill.paid_by).first()
+    return templates.TemplateResponse(
+        request, "bills/request.html",
+        {"current_user": None, "guest": guest, "bill": bill, "amount": amount, "payer": payer},
     )
 
 

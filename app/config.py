@@ -17,6 +17,22 @@ class Settings(BaseSettings):
     session_expire_days: int = 30
     secure_cookies: bool = True
 
+    # Absolute URL of the deployed app, used to build links in emails.
+    # Falls back to the incoming request URL when empty.
+    app_base_url: str = ""
+
+    # SMTP for emailing payment requests (optional).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @property

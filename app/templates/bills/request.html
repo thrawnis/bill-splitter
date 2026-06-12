@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Payment Request — BillSplit{% endblock %}
+{% block content %}
+<div class="min-h-screen flex flex-col justify-center px-6 py-12">
+  <div class="bg-white rounded-2xl shadow-sm p-6 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xl mx-auto mb-4">
+      {{ guest.name[0].upper() }}
+    </div>
+    <p class="text-gray-500 text-sm">Hi {{ guest.name }}, you owe</p>
+    <p class="text-4xl font-bold text-gray-900 my-1">${{ "%.2f"|format(amount) }}</p>
+    <p class="text-gray-500 text-sm">to {{ payer.display_name }} for <span class="font-medium text-gray-700">{{ bill.title }}</span></p>
+
+    {% if amount > 0 %}
+    <div class="mt-6 space-y-2">
+      {% if payer.venmo_handle %}
+      <a href="https://venmo.com/{{ payer.venmo_handle }}?txn=pay&amount={{ '%.2f'|format(amount) }}&note={{ bill.title|urlencode }}"
+         target="_blank" rel="noopener"
+         class="block w-full py-3 bg-[#3d95ce] text-white font-semibold rounded-xl">Pay via Venmo</a>
+      {% endif %}
+      {% if payer.paypal_me %}
+      <a href="https://paypal.me/{{ payer.paypal_me }}/{{ '%.2f'|format(amount) }}"
+         target="_blank" rel="noopener"
+         class="block w-full py-3 bg-[#003087] text-white font-semibold rounded-xl">Pay via PayPal</a>
+      {% endif %}
+      {% if payer.cashapp_handle %}
+      <a href="https://cash.app/${{ payer.cashapp_handle }}/{{ '%.2f'|format(amount) }}"
+         target="_blank" rel="noopener"
+         class="block w-full py-3 bg-[#00d632] text-black font-semibold rounded-xl">Pay via Cash App</a>
+      {% endif %}
+      {% if payer.zelle_contact %}
+      <div class="w-full py-3 bg-purple-100 text-purple-700 font-medium rounded-xl">Zelle: {{ payer.zelle_contact }}</div>
+      {% endif %}
+      {% if not payer.venmo_handle and not payer.paypal_me and not payer.cashapp_handle and not payer.zelle_contact %}
+      <p class="text-sm text-gray-400">{{ payer.display_name }} hasn't added any payment methods yet.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Itemized breakdown -->
+  <div class="bg-white rounded-2xl shadow-sm p-4 mt-3">
+    <h2 class="font-semibold text-gray-900 mb-3 text-sm">Your items</h2>
+    <div class="space-y-1.5">
+      {% for item in bill.items %}
+      {% set yours = item.assignments|selectattr('guest_id', 'equalto', guest.id)|list %}
+      {% if yours %}
+      <div class="flex justify-between text-sm">
+        <span class="text-gray-600">{{ item.name }}</span>
+        <span class="text-gray-500">${{ "%.2f"|format((item.price * item.quantity) / item.assignments|length) }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if bill.tax > 0 or bill.tip > 0 %}
+      <div class="flex justify-between text-xs text-gray-400 pt-1 border-t border-gray-100">
+        <span>+ your share of tax &amp; tip</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

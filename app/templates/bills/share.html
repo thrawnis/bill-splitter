@@ -22,7 +22,7 @@
         </div>
         {% if item.assignments %}
         <p class="text-xs text-gray-400">
-          {{ item.assignments|map(attribute='user')|map(attribute='display_name')|join(', ') }}
+          {% for a in item.assignments %}{{ a.user.display_name if a.user else a.guest.name }}{% if not loop.last %}, {% endif %}{% endfor %}
         </p>
         {% endif %}
       </div>
@@ -49,7 +49,7 @@
     <h2 class="font-semibold text-gray-900 mb-3">Per Person</h2>
     <div class="space-y-2">
       {% for member in members %}
-      {% set total = person_totals.get(member.id, 0) %}
+      {% set total = person_totals.get(('u', member.id), 0) %}
       {% if total > 0 %}
       <div class="flex justify-between items-center">
         <div class="flex items-center gap-2">
@@ -58,6 +58,21 @@
           </div>
           <span class="text-sm text-gray-700">{{ member.display_name }}</span>
           {% if member.id == bill.paid_by %}<span class="text-xs text-gray-400">(paid)</span>{% endif %}
+        </div>
+        <span class="font-semibold text-gray-900">${{ "%.2f"|format(total) }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% for guest in bill.guests %}
+      {% set total = person_totals.get(('g', guest.id), 0) %}
+      {% if total > 0 %}
+      <div class="flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs">
+            {{ guest.name[0].upper() }}
+          </div>
+          <span class="text-sm text-gray-700">{{ guest.name }}</span>
+          <span class="text-xs text-amber-600">guest</span>
         </div>
         <span class="font-semibold text-gray-900">${{ "%.2f"|format(total) }}</span>
       </div>

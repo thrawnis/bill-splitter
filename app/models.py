@@ -83,6 +83,7 @@ class Bill(Base):
 
     group: Mapped["Group"] = relationship(back_populates="bills")
     items: Mapped[list["BillItem"]] = relationship(back_populates="bill", cascade="all, delete-orphan", order_by="BillItem.created_at")
+    guests: Mapped[list["BillGuest"]] = relationship(back_populates="bill", cascade="all, delete-orphan", order_by="BillGuest.created_at")
     payer: Mapped["User"] = relationship(foreign_keys=[paid_by])
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
 
@@ -107,11 +108,30 @@ class ItemAssignment(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     item_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("bill_items.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    guest_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("bill_guests.id", ondelete="CASCADE"), nullable=True)
     share: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False)
 
     item: Mapped["BillItem"] = relationship(back_populates="assignments")
-    user: Mapped["User"] = relationship()
+    user: Mapped["User | None"] = relationship()
+    guest: Mapped["BillGuest | None"] = relationship()
+
+    @property
+    def participant_key(self) -> tuple[str, uuid.UUID]:
+        return ("u", self.user_id) if self.user_id else ("g", self.guest_id)
+
+
+class BillGuest(Base):
+    __tablename__ = "bill_guests"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bill_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("bills.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    bill: Mapped["Bill"] = relationship(back_populates="guests")
 
 
 class Settlement(Base):
