@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-mkdir -p /app/data/uploads /app/data/postgres
-chown -R app:app /app/data
+mkdir -p /app/data/uploads
+chown app:app /app/data /app/data/uploads
 
 gosu app python -c "
 from app.database import engine

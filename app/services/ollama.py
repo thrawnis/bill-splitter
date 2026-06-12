@@ -42,7 +42,10 @@ async def parse_receipt(image_path: str) -> list[dict]:
     if start == -1 or end == 0:
         return []
 
-    items = json.loads(content[start:end])
+    try:
+        items = json.loads(content[start:end])
+    except json.JSONDecodeError:
+        return []
     return [
         {
             "name": str(item.get("name", "Unknown item")).strip(),

@@ -56,7 +56,6 @@ class Group(Base):
 
 class GroupMember(Base):
     __tablename__ = "group_members"
-    __table_args__ = (UniqueConstraint("group_id", "user_id"),)
 
     group_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)

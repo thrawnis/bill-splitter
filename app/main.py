@@ -1,15 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
-from .routes import auth, dashboard, groups, bills, profile
+from .routes import auth, bills, dashboard, groups, profile
 
-app = FastAPI(title="BillSplit")
-
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-templates = Jinja2Templates(directory="app/templates")
+app = FastAPI(title="BillSplit", docs_url=None, redoc_url=None, openapi_url=None)
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
@@ -24,6 +18,5 @@ async def root():
 
 
 @app.exception_handler(307)
-async def temp_redirect_handler(request: Request, exc):
-    location = exc.headers.get("Location", "/auth/login")
-    return RedirectResponse(url=location, status_code=302)
+async def auth_redirect_handler(request: Request, exc):
+    return RedirectResponse(url=exc.headers.get("Location", "/auth/login"), status_code=302)

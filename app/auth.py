@@ -23,11 +23,19 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_session(user_id, db: Session) -> str:
+    now = datetime.now(timezone.utc)
+    db.query(UserSession).filter(UserSession.expires_at <= now).delete()
     token = secrets.token_hex(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.session_expire_days)
-    db.add(UserSession(token=token, user_id=user_id, expires_at=expires_at))
+    db.add(UserSession(token=token, user_id=user_id, expires_at=now + timedelta(days=settings.session_expire_days)))
     db.commit()
     return token
+
+
+def safe_internal_path(path: str, fallback: str = "/dashboard") -> str:
+    # "//host" and "/\host" are protocol-relative redirects in browsers
+    if path.startswith("/") and not path.startswith("//") and "\\" not in path:
+        return path
+    return fallback
 
 
 def set_session_cookie(response, token: str) -> None:
