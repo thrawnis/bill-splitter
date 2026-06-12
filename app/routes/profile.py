@@ -13,7 +13,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("")
 async def profile_page(request: Request, current_user: User = Depends(require_user)):
-    return templates.TemplateResponse("profile.html", {"request": request, "current_user": current_user})
+    return templates.TemplateResponse(request, "profile.html", {"request": request, "current_user": current_user})
 
 
 @router.post("")
@@ -28,8 +28,7 @@ async def update_profile(
     db: Session = Depends(get_db),
 ):
     if not display_name.strip():
-        return templates.TemplateResponse(
-            "profile.html",
+        return templates.TemplateResponse(request, "profile.html",
             {"request": request, "current_user": current_user, "error": "Display name cannot be empty."},
         )
 
@@ -40,8 +39,7 @@ async def update_profile(
     current_user.cashapp_handle = cashapp_handle.strip().lstrip("$") or None
     db.commit()
 
-    return templates.TemplateResponse(
-        "profile.html",
+    return templates.TemplateResponse(request, "profile.html",
         {"request": request, "current_user": current_user, "success": "Profile updated."},
     )
 
@@ -55,18 +53,15 @@ async def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(current_password, current_user.password_hash):
-        return templates.TemplateResponse(
-            "profile.html",
+        return templates.TemplateResponse(request, "profile.html",
             {"request": request, "current_user": current_user, "pw_error": "Current password is incorrect."},
         )
     if len(new_password) < 8:
-        return templates.TemplateResponse(
-            "profile.html",
+        return templates.TemplateResponse(request, "profile.html",
             {"request": request, "current_user": current_user, "pw_error": "New password must be at least 8 characters."},
         )
     current_user.password_hash = hash_password(new_password)
     db.commit()
-    return templates.TemplateResponse(
-        "profile.html",
+    return templates.TemplateResponse(request, "profile.html",
         {"request": request, "current_user": current_user, "pw_success": "Password changed."},
     )

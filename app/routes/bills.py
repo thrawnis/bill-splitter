@@ -58,8 +58,7 @@ async def new_bill_page(
         return RedirectResponse("/groups", status_code=302)
 
     members = _get_group_members(group_id, db)
-    return templates.TemplateResponse(
-        "bills/new.html",
+    return templates.TemplateResponse(request, "bills/new.html",
         {"request": request, "current_user": current_user, "group": group, "members": members},
     )
 
@@ -104,7 +103,7 @@ async def bill_detail(
 
     ctx = _bill_context(bill, current_user, db)
     ctx["request"] = request
-    return templates.TemplateResponse("bills/detail.html", ctx)
+    return templates.TemplateResponse(request, "bills/detail.html", ctx)
 
 
 @router.post("/bills/{bill_id}/items")
@@ -129,7 +128,7 @@ async def add_item(
         if _is_htmx(request):
             ctx = _bill_context(bill, current_user, db)
             ctx.update({"request": request, "item_error": "Invalid price."})
-            return templates.TemplateResponse("partials/bill_content.html", ctx)
+            return templates.TemplateResponse(request, "partials/bill_content.html", ctx)
         return RedirectResponse(f"/bills/{bill_id}", status_code=302)
 
     db.add(BillItem(bill_id=bill_id, name=name.strip(), price=price_dec, quantity=max(1, quantity)))
@@ -138,7 +137,7 @@ async def add_item(
 
     ctx = _bill_context(bill, current_user, db)
     ctx["request"] = request
-    return templates.TemplateResponse("partials/bill_content.html", ctx)
+    return templates.TemplateResponse(request, "partials/bill_content.html", ctx)
 
 
 @router.delete("/bills/{bill_id}/items/{item_id}")
@@ -161,7 +160,7 @@ async def delete_item(
     db.refresh(bill)
     ctx = _bill_context(bill, current_user, db)
     ctx["request"] = request
-    return templates.TemplateResponse("partials/bill_content.html", ctx)
+    return templates.TemplateResponse(request, "partials/bill_content.html", ctx)
 
 
 @router.post("/bills/{bill_id}/items/{item_id}/toggle/{user_id}")
@@ -201,7 +200,7 @@ async def toggle_item_user(
 
     ctx = _bill_context(bill, current_user, db)
     ctx["request"] = request
-    return templates.TemplateResponse("partials/bill_content.html", ctx)
+    return templates.TemplateResponse(request, "partials/bill_content.html", ctx)
 
 
 @router.post("/bills/{bill_id}/tax-tip")
@@ -227,7 +226,7 @@ async def update_tax_tip(
 
     ctx = _bill_context(bill, current_user, db)
     ctx["request"] = request
-    return templates.TemplateResponse("partials/bill_content.html", ctx)
+    return templates.TemplateResponse(request, "partials/bill_content.html", ctx)
 
 
 @router.post("/bills/{bill_id}/scan")
@@ -240,14 +239,12 @@ async def scan_receipt(
 ):
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
     if not bill or not db.query(GroupMember).filter(GroupMember.group_id == bill.group_id, GroupMember.user_id == current_user.id).first():
-        return templates.TemplateResponse(
-            "partials/scan_results.html",
+        return templates.TemplateResponse(request, "partials/scan_results.html",
             {"request": request, "error": "Access denied.", "bill_id": bill_id},
         )
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:
-        return templates.TemplateResponse(
-            "partials/scan_results.html",
+        return templates.TemplateResponse(request, "partials/scan_results.html",
             {"request": request, "error": "Please upload a JPEG, PNG, or WebP image.", "bill_id": bill_id},
         )
 
@@ -264,13 +261,11 @@ async def scan_receipt(
     try:
         items = await parse_receipt(str(upload_path))
     except Exception as e:
-        return templates.TemplateResponse(
-            "partials/scan_results.html",
+        return templates.TemplateResponse(request, "partials/scan_results.html",
             {"request": request, "error": f"Ollama error: {e}", "bill_id": bill_id},
         )
 
-    return templates.TemplateResponse(
-        "partials/scan_results.html",
+    return templates.TemplateResponse(request, "partials/scan_results.html",
         {"request": request, "items": items, "bill_id": str(bill_id)},
     )
 
@@ -279,14 +274,13 @@ async def scan_receipt(
 async def bill_share(share_token: str, request: Request, db: Session = Depends(get_db)):
     bill = db.query(Bill).filter(Bill.share_token == share_token).first()
     if not bill:
-        return templates.TemplateResponse("error.html", {"request": request, "current_user": None, "message": "Bill not found."})
+        return templates.TemplateResponse(request, "error.html", {"request": request, "current_user": None, "message": "Bill not found."})
 
     members = _get_group_members(bill.group_id, db)
     person_totals = bill_person_totals(bill, members)
     payer = db.query(User).filter(User.id == bill.paid_by).first()
 
-    return templates.TemplateResponse(
-        "bills/share.html",
+    return templates.TemplateResponse(request, "bills/share.html",
         {
             "request": request,
             "current_user": None,

@@ -44,8 +44,7 @@ async def dashboard(request: Request, current_user: User = Depends(require_user)
         else []
     )
 
-    return templates.TemplateResponse(
-        "dashboard.html",
+    return templates.TemplateResponse(request, "dashboard.html",
         {
             "request": request,
             "current_user": current_user,

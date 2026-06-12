@@ -24,12 +24,12 @@ async def list_groups(request: Request, current_user: User = Depends(require_use
     memberships = db.query(GroupMember).filter(GroupMember.user_id == current_user.id).all()
     group_ids = [m.group_id for m in memberships]
     groups = db.query(Group).filter(Group.id.in_(group_ids)).order_by(Group.created_at.desc()).all() if group_ids else []
-    return templates.TemplateResponse("groups/list.html", {"request": request, "current_user": current_user, "groups": groups})
+    return templates.TemplateResponse(request, "groups/list.html", {"request": request, "current_user": current_user, "groups": groups})
 
 
 @router.get("/new")
 async def new_group_page(request: Request, current_user: User = Depends(require_user)):
-    return templates.TemplateResponse("groups/new.html", {"request": request, "current_user": current_user})
+    return templates.TemplateResponse(request, "groups/new.html", {"request": request, "current_user": current_user})
 
 
 @router.post("")
@@ -40,7 +40,7 @@ async def create_group(
     db: Session = Depends(get_db),
 ):
     if not name.strip():
-        return templates.TemplateResponse("groups/new.html", {"request": request, "current_user": current_user, "error": "Group name is required."})
+        return templates.TemplateResponse(request, "groups/new.html", {"request": request, "current_user": current_user, "error": "Group name is required."})
 
     group = Group(name=name.strip(), created_by=current_user.id, invite_token=secrets.token_urlsafe(32))
     db.add(group)
@@ -71,8 +71,7 @@ async def group_detail(
 
     bills = sorted(group.bills, key=lambda b: b.created_at, reverse=True)
 
-    return templates.TemplateResponse(
-        "groups/detail.html",
+    return templates.TemplateResponse(request, "groups/detail.html",
         {
             "request": request,
             "current_user": current_user,
@@ -90,13 +89,13 @@ async def group_detail(
 async def join_group_page(token: str, request: Request, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
     group = db.query(Group).filter(Group.invite_token == token).first()
     if not group:
-        return templates.TemplateResponse("error.html", {"request": request, "current_user": current_user, "message": "Invite link is invalid or expired."})
+        return templates.TemplateResponse(request, "error.html", {"request": request, "current_user": current_user, "message": "Invite link is invalid or expired."})
 
     already_member = db.query(GroupMember).filter(GroupMember.group_id == group.id, GroupMember.user_id == current_user.id).first()
     if already_member:
         return RedirectResponse(f"/groups/{group.id}", status_code=302)
 
-    return templates.TemplateResponse("groups/join.html", {"request": request, "current_user": current_user, "group": group, "token": token})
+    return templates.TemplateResponse(request, "groups/join.html", {"request": request, "current_user": current_user, "group": group, "token": token})
 
 
 @router.post("/join/{token}")

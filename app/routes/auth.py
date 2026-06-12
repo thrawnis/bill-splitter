@@ -15,7 +15,7 @@ templates = Jinja2Templates(directory="app/templates")
 async def login_page(request: Request, next: str = "/dashboard", current_user=Depends(get_current_user)):
     if current_user:
         return RedirectResponse("/dashboard", status_code=302)
-    return templates.TemplateResponse("auth/login.html", {"request": request, "next": next})
+    return templates.TemplateResponse(request, "auth/login.html", {"request": request, "next": next})
 
 
 @router.post("/login")
@@ -28,8 +28,7 @@ async def login_post(
 ):
     user = db.query(User).filter(User.email == email.lower().strip()).first()
     if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            "auth/login.html",
+        return templates.TemplateResponse(request, "auth/login.html",
             {"request": request, "error": "Invalid email or password", "email": email, "next": next},
         )
     token = create_session(user.id, db)
@@ -42,7 +41,7 @@ async def login_post(
 async def register_page(request: Request, current_user=Depends(get_current_user)):
     if current_user:
         return RedirectResponse("/dashboard", status_code=302)
-    return templates.TemplateResponse("auth/register.html", {"request": request})
+    return templates.TemplateResponse(request, "auth/register.html", {"request": request})
 
 
 @router.post("/register")
@@ -55,13 +54,11 @@ async def register_post(
 ):
     email = email.lower().strip()
     if db.query(User).filter(User.email == email).first():
-        return templates.TemplateResponse(
-            "auth/register.html",
+        return templates.TemplateResponse(request, "auth/register.html",
             {"request": request, "error": "An account with that email already exists.", "email": email, "display_name": display_name},
         )
     if len(password) < 8:
-        return templates.TemplateResponse(
-            "auth/register.html",
+        return templates.TemplateResponse(request, "auth/register.html",
             {"request": request, "error": "Password must be at least 8 characters.", "email": email, "display_name": display_name},
         )
     user = User(email=email, display_name=display_name.strip(), password_hash=hash_password(password))
