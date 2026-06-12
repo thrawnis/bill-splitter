@@ -16,7 +16,7 @@ git -C "$REPO" pull origin "$BRANCH"
 
 # Ensure host-side data subdirs exist before Docker mounts them
 echo "==> Creating data directories..."
-mkdir -p "$REPO/data/uploads" "$REPO/data/postgres"
+mkdir -p "$REPO/data/uploads"
 
 COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 echo "==> Rebuilding Docker image (commit: $COMMIT)..."
