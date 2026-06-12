@@ -4,22 +4,26 @@ from typing import Optional
 
 from fastapi import Request, Depends
 from fastapi.responses import RedirectResponse
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import get_db
 from .models import User, UserSession
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_ph = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return _ph.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return _ph.verify(hashed, plain)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
 
 
 def create_session(user_id, db: Session) -> str:
