@@ -17,7 +17,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   db:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-billsplit}
       POSTGRES_USER: ${POSTGRES_USER:-billsplit}
