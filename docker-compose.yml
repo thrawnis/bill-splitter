@@ -1,3 +1,5 @@
+name: billsplit
+
 services:
   app:
     build:
