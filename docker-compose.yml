@@ -2,6 +2,11 @@ name: billsplit
 
 services:
   app:
+    # Pinned explicitly so Compose uses the image rebuild.sh builds with buildx
+    # rather than deriving a name and trying (and failing) to build it itself.
+    # The build: block is kept only as a manual fallback; the deploy path passes
+    # --no-build so Compose never runs its own (maybe non-BuildKit) build.
+    image: billsplit-app:latest
     build:
       context: .
       args:
