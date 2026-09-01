@@ -1,0 +1,11 @@
+.env
+data/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+README.md
+rebuild.sh
+*.md

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Join Group — BillSplit{% endblock %}
+{% block content %}
+<div class="min-h-screen flex flex-col justify-center px-6">
+  <div class="bg-white rounded-2xl shadow-sm p-8 text-center">
+    <div class="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-2xl mx-auto mb-4">
+      {{ group.name[0].upper() }}
+    </div>
+    <h1 class="text-xl font-bold text-gray-900 mb-1">Join "{{ group.name }}"</h1>
+    <p class="text-gray-400 text-sm mb-6">You've been invited to split bills together.</p>
+    <form method="post" action="/groups/join/{{ token }}">
+      <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-base transition-colors">
+        Join Group
+      </button>
+    </form>
+    <a href="/dashboard" class="block mt-3 text-sm text-gray-400">Maybe later</a>
+  </div>
+</div>
+{% endblock %}
