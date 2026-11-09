@@ -26,15 +26,22 @@ git -C "$REPO" checkout "$BRANCH"
 echo "==> Discarding any local changes..."
 git -C "$REPO" reset --hard
 
-OLD_COMMIT=$(git -C "$REPO" rev-parse HEAD)
-
 echo "==> Pulling latest code..."
 git -C "$REPO" pull origin "$BRANCH"
 
-NEW_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-if [ "$OLD_COMMIT" = "$NEW_COMMIT" ] && [ "$FORCE" -eq 0 ] && [ -z "$PULL_BASE" ]; then
-  echo "==> No new commits on $BRANCH; nothing to rebuild. Pass --force to rebuild anyway."
+# Compare against what's actually running, not just whether the pull brought
+# new commits: a container stuck from a prior failed build, a manual restart,
+# or an image built outside this script would otherwise be missed.
+CONTAINER_ID=$(docker compose -f "$COMPOSE_FILE" ps -q app 2>/dev/null || true)
+RUNNING_COMMIT=""
+if [ -n "$CONTAINER_ID" ]; then
+  RUNNING_COMMIT=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER_ID" 2>/dev/null | sed -n 's/^GIT_COMMIT=//p')
+fi
+
+if [ "$RUNNING_COMMIT" = "$COMMIT" ] && [ "$FORCE" -eq 0 ] && [ -z "$PULL_BASE" ]; then
+  echo "==> Running container is already on commit $COMMIT; nothing to rebuild. Pass --force to rebuild anyway."
   exit 0
 fi
 
@@ -42,7 +49,6 @@ fi
 echo "==> Creating data directories..."
 mkdir -p "$REPO/data/uploads"
 
-COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 echo "==> Building image $IMAGE:latest (commit: $COMMIT)..."
 # Build directly with buildx so BuildKit is always used. `docker compose build`
 # can silently fall back to the legacy builder on this host, which then chokes
