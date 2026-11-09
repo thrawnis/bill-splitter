@@ -9,10 +9,13 @@ IMAGE="billsplit-app"
 # --pull-base-images makes buildx re-check the registry for a newer base image.
 # Off by default: it adds a network round-trip to every rebuild for almost no
 # benefit. Pass it manually when you deliberately want a fresh python:3.12-slim.
+# --force skips the "nothing changed" check below and rebuilds/recreates anyway.
 PULL_BASE=""
+FORCE=0
 for arg in "$@"; do
   case "$arg" in
     --pull-base-images) PULL_BASE="--pull" ;;
+    --force) FORCE=1 ;;
     *) echo "Unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
@@ -23,8 +26,17 @@ git -C "$REPO" checkout "$BRANCH"
 echo "==> Discarding any local changes..."
 git -C "$REPO" reset --hard
 
+OLD_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+
 echo "==> Pulling latest code..."
 git -C "$REPO" pull origin "$BRANCH"
+
+NEW_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+
+if [ "$OLD_COMMIT" = "$NEW_COMMIT" ] && [ "$FORCE" -eq 0 ] && [ -z "$PULL_BASE" ]; then
+  echo "==> No new commits on $BRANCH; nothing to rebuild. Pass --force to rebuild anyway."
+  exit 0
+fi
 
 # Ensure host-side data subdirs exist before Docker mounts them
 echo "==> Creating data directories..."
