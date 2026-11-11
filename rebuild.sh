@@ -20,14 +20,19 @@ for arg in "$@"; do
   esac
 done
 
+echo "==> Fetching latest code..."
+git -C "$REPO" fetch origin "$BRANCH"
+
 echo "==> Switching to branch: $BRANCH"
 git -C "$REPO" checkout "$BRANCH"
 
-echo "==> Discarding any local changes..."
-git -C "$REPO" reset --hard
-
-echo "==> Pulling latest code..."
-git -C "$REPO" pull origin "$BRANCH"
+# Reset straight to origin's tip rather than `git pull`, so this always lands
+# on the latest commit even if the local branch ever diverges (a stray local
+# commit, an interrupted previous run, etc.) instead of merging/failing.
+# No `git clean`: data/postgres and data/uploads live inside this repo dir
+# (git-ignored but untracked), and clean would delete the live DB/uploads.
+echo "==> Discarding any local changes and resetting to origin/$BRANCH..."
+git -C "$REPO" reset --hard "origin/$BRANCH"
 
 COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
